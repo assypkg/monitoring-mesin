@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Monitoring Mesin - View Only</title>
+  
+  <!-- Tailwind CSS & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  
+  <!-- jsPDF & AutoTable untuk Ekspor Laporan -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD8W_cABvEnNBtmAFIZPCHE2g9kyxrRi0s",
+      authDomain: "mesin-cloud-app.firebaseapp.com",
+      projectId: "mesin-cloud-app",
+      storageBucket: "mesin-cloud-app.firebasestorage.app",
+      messagingSenderId: "20271105778",
+      appId: "1:20271105778:web:c253cf35236581a571726b",
+      measurementId: "G-TML7FFBP0V"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let listMesin = [];
+
+    function formatTanggalDetail(isoString) {
+      if(!isoString) return "-";
+      const date = new Date(isoString);
+      const hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][date.getDay()];
+      const tgl = date.getDate().toString().padStart(2, '0');
+      const bln = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][date.getMonth()];
+      const jam = date.getHours().toString().padStart(2, '0');
+      const mnt = date.getMinutes().toString().padStart(2, '0');
+      return `${hari}, ${tgl} ${bln} - ${jam}:${mnt} WIB`;
+    }
+
+    function mulaiPemantauanRealtime() {
+      const container = document.getElementById('cardsContainer');
+      container.innerHTML = `<div class="text-center py-10 text-slate-400 text-sm w-full col-span-full"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Menghubungkan ke server...</div>`;
+      
+      const q = query(collection(db, "mesin"), orderBy("waktuInput", "desc"));
+      
+      onSnapshot(q, (querySnapshot) => {
+        listMesin = [];
+        querySnapshot.forEach((d) => {
+          listMesin.push({ id: d.id, ...d.data() });
+        });
+        
+        renderKPI(listMesin);
+        renderLog(listMesin);
+        renderRingkasanTipe(listMesin); 
+        try {
+          if (window.filterData) window.filterData(); 
+          if (window.filterRingkasan) window.filterRingkasan();
+        } catch (err) {
+          console.error("Gagal melakukan filter data:", err);
+        }
+      }, (err) => {
+        console.error("Gagal mendengarkan pembaruan data:", err);
+        container.innerHTML = `<div class="text-center py-10 text-red-500 text-sm w-full col-span-full bg-white rounded-2xl border border-slate-200">Koneksi terputus. Menunggu jaringan stabil...</div>`;
+      });
+    }
+
+    function renderKPI(data) {
+      document.getElementById('kpiTotalItem').innerText = data.length;
+      const totalUnit = data.reduce((sum, item) => sum + (Number(item.jumlah) || 0), 0);
+      document.getElementById('kpiTotalUnit').innerText = totalUnit;
+    }
+
+    function renderLog(data) {
+      const container = document.getElementById('logContainer');
+      const latest3 = data.slice(0, 3);
+      
+      if(latest3.length === 0) {
+         container.innerHTML = `<div class="text-[10px] text-slate-400 mt-2 text-center w-full">Belum ada riwayat input</div>`;
+         return;
+      }
+
+      container.innerHTML = latest3.map(m => `
+        <div class="flex flex-col border-l-2 border-emerald-400 pl-2 mb-1.5 last:mb-0 w-full animate-fade-in">
+          <span class="text-[10px] font-bold text-slate-700 truncate">${m.namaMesin}</span>
+          <span class="text-[9px] text-slate-500">${formatTanggalDetail(m.waktuInput)}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderRingkasanTipe(data) {
+      const rekap = {};
+      data.forEach(m => {
+        const tipe = m.tipeMesin ? m.tipeMesin.trim().toUpperCase() : 'TANPA TIPE';
+        if (!rekap[tipe]) rekap[tipe] = { total: 0, items: [] };
+        rekap[tipe].total += (Number(m.jumlah) || 0);
+        rekap[tipe].items.push(m);
+      });
+      
+      window.currentRekapTipe = rekap; 
+
+      const container = document.getElementById('ringkasanContainer');
+      
+      if (Object.keys(rekap).length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center text-xs text-slate-400 py-4">Belum ada data tipe mesin.</div>`;
+        return;
+      }
+
+      let html = '';
+      Object.keys(rekap).sort().forEach(tipe => {
+        // Desain kartu diubah menjadi format vertikal yang lebih ringkas (cocok untuk 4 kolom)
+        html += `
+          <div data-tipe="${tipe}" onclick="bukaPopUpNamaMesin('${tipe}')" class="ringkasan-card bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 p-3 rounded-xl cursor-pointer transition duration-200 flex flex-col justify-between min-h-[75px] shadow-sm group">
+            <span class="font-bold text-slate-700 group-hover:text-blue-800 text-[10px] uppercase line-clamp-2 leading-tight mb-2" title="${tipe}">${tipe}</span>
+            <div class="flex justify-between items-end mt-auto">
+              <span class="bg-white border border-slate-200 group-hover:border-blue-300 text-emerald-600 px-2 py-1 rounded-lg text-[9px] font-extrabold shadow-sm whitespace-nowrap">
+                ${rekap[tipe].total} Unit
+              </span>
+              <i class="fa-solid fa-arrow-right text-slate-300 group-hover:text-blue-500 text-[10px]"></i>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function renderCards(data) {
+      const container = document.getElementById('cardsContainer');
+
+      if (data.length === 0) {
+        container.innerHTML = `<div class="text-center py-10 text-slate-400 text-sm w-full bg-white rounded-2xl border border-slate-200 shadow-sm">Data tidak ditemukan.</div>`;
+        return;
+      }
+
+      let html = '';
+
+      html += `
+        <div class="hidden md:block w-full overflow-x-auto bg-white rounded-2xl shadow-sm border border-slate-200">
+          <table class="w-full text-left border-collapse whitespace-nowrap min-w-max">
+            <thead>
+              <tr class="bg-blue-950 text-white text-xs uppercase tracking-wide">
+                <th class="px-4 py-3.5 font-semibold text-center w-12">No</th>
+                <th class="px-4 py-3.5 font-semibold">Tipe Mesin</th>
+                <th class="px-4 py-3.5 font-semibold">Nama Mesin</th>
+                <th class="px-4 py-3.5 font-semibold">Model</th>
+                <th class="px-4 py-3.5 font-semibold">No. Seri</th>
+                <th class="px-4 py-3.5 font-semibold">Tahun</th>
+                <th class="px-4 py-3.5 font-semibold">Keterangan</th>
+                <th class="px-4 py-3.5 font-semibold text-center">Jumlah</th>
+                <th class="px-4 py-3.5 font-semibold">Lokasi</th>
+              </tr>
+            </thead>
+            <tbody class="text-sm divide-y divide-slate-100">
+      `;
+
+      data.forEach((m, index) => {
+        html += `
+          <tr class="hover:bg-slate-50 transition duration-150">
+            <td class="px-4 py-3 text-center font-bold text-slate-400 text-xs">${index + 1}</td>
+            <td class="px-4 py-3"><span class="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold px-2 py-0.5 rounded uppercase">${m.tipeMesin || '-'}</span></td>
+            <td class="px-4 py-3 font-bold text-slate-800 flex items-center gap-2">
+              ${(m.fotoUrl && m.fotoUrl.length > 50) ? `<img src="${m.fotoUrl}" class="w-8 h-8 rounded object-cover border">` : ''}
+              ${m.namaMesin || '-'}
+            </td>
+            <td class="px-4 py-3 text-slate-600">${m.modelMesin || '-'}</td>
+            <td class="px-4 py-3 font-mono text-xs text-slate-500">${m.noSeri || '-'}</td>
+            <td class="px-4 py-3 text-slate-600 font-medium">${m.tahun || '-'}</td>
+            <td class="px-4 py-3 text-slate-500 text-xs max-w-xs truncate" title="${m.keterangan || '-'}">${m.keterangan || '-'}</td>
+            <td class="px-4 py-3 text-center font-bold text-emerald-700">${m.jumlah || 0} Unit</td>
+            <td class="px-4 py-3 text-slate-600 text-xs"><i class="fa-solid fa-location-dot text-slate-400 mr-1.5"></i>${m.plant || '-'}</td>
+          </tr>
+        `;
+      });
+      html += `</tbody></table></div>`;
+
+      html += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 md:hidden">`;
+      data.forEach((m, index) => {
+        html += `
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 relative flex flex-col">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="bg-slate-100 text-slate-600 text-[10px] font-extrabold px-2 py-0.5 rounded-md">#${index + 1}</span>
+              <span class="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold px-2 py-0.5 rounded uppercase break-words max-w-[150px]">${m.tipeMesin || '-'}</span>
+            </div>
+            
+            <div class="flex gap-3 mb-4">
+              ${(m.fotoUrl && m.fotoUrl.length > 50) ? `<img src="${m.fotoUrl}" class="w-12 h-12 rounded-xl object-cover border flex-shrink-0">` : ''}
+              <div>
+                <h4 class="font-bold text-slate-800 text-sm mb-0.5 leading-tight">${m.namaMesin || '-'}</h4>
+                <p class="text-[11px] text-slate-500 font-medium">${m.modelMesin || '-'} <span class="mx-1">•</span> <span class="font-mono text-[10px]">${m.noSeri || '-'}</span></p>
+              </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2.5 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100 mt-auto">
+              <div><span class="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Tahun</span> <span class="font-semibold text-slate-700">${m.tahun || '-'}</span></div>
+              <div><span class="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Jumlah</span> <span class="font-bold text-emerald-600">${m.jumlah || 0} Unit</span></div>
+              <div class="col-span-2 flex items-center mt-0.5"><i class="fa-solid fa-location-dot text-slate-400 mr-1.5 text-[10px]"></i><span class="font-semibold text-slate-600">${m.plant || '-'}</span></div>
+              ${m.keterangan ? `<div class="col-span-2 border-t border-slate-200 pt-2 mt-1"><span class="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Keterangan</span> <span class="text-slate-600 italic text-[11px] leading-snug">${m.keterangan}</span></div>` : ''}
+            </div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+
+      container.innerHTML = html;
+    }
+
+    window.getListMesin = () => listMesin;
+    window.renderCards = renderCards;
+    
+    document.addEventListener("DOMContentLoaded", () => {
+      mulaiPemantauanRealtime();
+    });
+  </script>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 pb-20">
+
+  <header class="bg-blue-950 text-white p-4 sticky top-0 z-40 shadow-md">
+    <div class="max-w-6xl mx-auto flex justify-between items-center w-full">
+      <div>
+        <h1 class="font-bold text-lg tracking-wide"><i class="fa-solid fa-industry text-emerald-400 mr-2"></i>Database Mesin Assembly</h1>
+        <p class="text-xs text-slate-300">Daftar Mesin Assembly Live View</p>
+      </div>
+      <div class="bg-blue-900/50 border border-blue-800 text-blue-200 text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 sm:gap-2">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="hidden sm:inline">Sinkronisasi Aktif</span>
+        <span class="sm:hidden">Aktif</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto p-4 md:p-6 lg:p-8">
+    
+    <!-- DASHBOARD KPI & LOG -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div class="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-3xl p-6 text-white shadow-md flex flex-col justify-center min-h-[120px]">
+        <span class="text-xs font-bold opacity-90 tracking-wider uppercase">Total Aset Keseluruhan</span>
+        <div class="flex items-end gap-2 mt-2">
+          <span id="kpiTotalItem" class="text-5xl font-extrabold">0</span>
+          <span class="text-xs mb-2 opacity-90">Mesin Terdata</span>
+        </div>
+        <div class="text-[10px] md:text-xs bg-black/20 px-3 py-1.5 rounded-lg mt-3 inline-block w-fit font-medium">
+          <i class="fa-solid fa-cubes mr-1.5"></i><span id="kpiTotalUnit">0</span> Unit Aktual
+        </div>
+      </div>
+      
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm flex flex-col min-h-[120px]">
+        <span class="text-[10px] md:text-xs font-bold text-slate-400 mb-3 uppercase tracking-wide border-b pb-2"><i class="fa-solid fa-clock-rotate-left mr-1.5"></i>Riwayat Input Terakhir</span>
+        <div id="logContainer" class="flex-1 flex flex-col justify-center gap-2"></div>
+      </div>
+    </div>
+
+    <!-- BLOK RINGKASAN TIPE MESIN -->
+    <div class="mb-6 bg-white border border-slate-200 rounded-3xl p-4 md:p-5 shadow-sm">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 mb-3 gap-3">
+        <span class="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wide flex items-center shrink-0">
+          <i class="fa-solid fa-chart-pie mr-2 text-blue-500"></i> Ringkasan Tipe Mesin
+        </span>
+        
+        <!-- Fitur Pencarian Khusus Ringkasan -->
+        <div class="relative w-full sm:w-64">
+          <input type="text" id="searchRingkasan" onkeyup="filterRingkasan()" placeholder="Cari tipe mesin..." class="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 shadow-sm transition">
+          <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-[10px]"></i>
+        </div>
+      </div>
+      
+      <!-- Grid diubah menjadi 2 kolom (Mobile) dan 4 kolom (Tablet/PC) -->
+      <div id="ringkasanContainer" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      </div>
+    </div>
+
+    <!-- TOOLBAR PENCARIAN UTAMA & FILTER -->
+    <div class="flex flex-col sm:flex-row gap-3 mb-6 bg-white border border-slate-200 p-3 rounded-2xl shadow-sm items-center">
+      <div class="flex gap-2 w-full flex-1 items-center">
+        <div class="relative flex-1">
+          <input type="text" id="searchInput" onkeyup="filterData()" placeholder="Cari mesin, tipe, model..." class="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 shadow-sm transition">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-400 text-xs md:text-sm"></i>
+        </div>
+        <button onclick="eksporPDF()" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold hover:bg-emerald-100 flex items-center justify-center shadow-sm whitespace-nowrap transition">
+          <i class="fa-solid fa-file-pdf mr-1.5"></i> Ekspor PDF
+        </button>
+      </div>
+      <div class="w-full sm:w-auto mt-1 sm:mt-0 flex gap-2 items-center">
+        <span class="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-wide hidden md:block"><i class="fa-solid fa-arrow-down-a-z mr-1"></i>Sortir:</span>
+        <select id="sortBy" onchange="filterData()" class="w-full sm:w-44 bg-slate-50 border border-slate-200 text-xs md:text-sm font-semibold rounded-xl px-3 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-700 cursor-pointer">
+          <option value="terbaru">Terbaru Diinput</option>
+          <option value="tipe_asc">Tipe (A-Z)</option>
+          <option value="nama_asc">Nama (A-Z)</option>
+          <option value="lokasi_asc">Lokasi / Plant</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- TABEL DATA UTAMA -->
+    <div id="cardsContainer" class="w-full transition-all duration-300"></div>
+  </main>
+
+  <!-- POP-UP LAPIS 1: NAMA MESIN BERDASARKAN TIPE -->
+  <div id="modalPopUpNama" class="fixed inset-0 bg-blue-950/70 z-50 hidden backdrop-blur-sm overflow-y-auto">
+    <div class="min-h-screen px-4 py-8 text-center flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-sm w-full p-6 text-left shadow-2xl relative border-t-4 border-blue-500">
+        <div class="flex justify-between items-center border-b pb-4 mb-4">
+          <h3 id="popUpNamaTitle" class="font-bold text-slate-800 text-base flex items-center"></h3>
+          <button onclick="tutupPopUpNama()" class="text-slate-400 hover:text-slate-600 transition"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+          <ul id="listPopUpNama" class="divide-y divide-slate-100 flex flex-col"></ul>
+        </div>
+        <button onclick="tutupPopUpNama()" class="w-full py-3 mt-5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 shadow-sm transition">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- POP-UP LAPIS 2: DETAIL RINCIAN SPESIFIK -->
+  <div id="modalDetailItems" class="fixed inset-0 bg-blue-950/80 z-[60] hidden backdrop-blur-sm overflow-y-auto">
+    <div class="min-h-screen px-4 py-8 text-center flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-md w-full p-6 text-left shadow-2xl relative border-t-4 border-emerald-500">
+        <div class="flex justify-between items-center border-b pb-4 mb-4">
+          <h3 id="detailItemsTitle" class="font-bold text-slate-800 text-base">Detail Rincian</h3>
+          <button onclick="tutupDetailItems()" class="text-slate-400 hover:text-slate-600 transition p-1"><i class="fa-solid fa-arrow-left text-xl"></i></button>
+        </div>
+        <div class="max-h-[65vh] overflow-y-auto pr-2 custom-scrollbar">
+          <ul id="listDetailItems" class="flex flex-col gap-3"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+  </style>
+
+  <script>
+    // FUNGSI PENCARIAN KHUSUS UNTUK BLOK RINGKASAN TIPE MESIN
+    function filterRingkasan() {
+      const q = document.getElementById('searchRingkasan').value.toLowerCase();
+      const cards = document.querySelectorAll('.ringkasan-card');
+      
+      cards.forEach(card => {
+        const tipe = card.getAttribute('data-tipe').toLowerCase();
+        if (tipe.includes(q)) {
+          card.style.display = 'flex';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    function filterData() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const sortBy = document.getElementById('sortBy').value;
+      const list = window.getListMesin();
+      
+      let filtered = list.filter(m => 
+        (m.namaMesin || '').toLowerCase().includes(q) || 
+        (m.noSeri || '').toLowerCase().includes(q) || 
+        (m.plant || '').toLowerCase().includes(q) ||
+        (m.tipeMesin || '').toLowerCase().includes(q) ||
+        (m.modelMesin || '').toLowerCase().includes(q) ||
+        (m.keterangan || '').toLowerCase().includes(q)
+      );
+
+      filtered.sort((a, b) => {
+        if (sortBy === 'nama_asc') {
+          return (a.namaMesin || '').localeCompare(b.namaMesin || '');
+        } else if (sortBy === 'tipe_asc') {
+          return (a.tipeMesin || '').localeCompare(b.tipeMesin || '');
+        } else if (sortBy === 'lokasi_asc') {
+          return (a.plant || '').localeCompare(b.plant || '');
+        } else {
+          return new Date(b.waktuInput || 0).getTime() - new Date(a.waktuInput || 0).getTime();
+        }
+      });
+
+      if (window.renderCards) {
+        window.renderCards(filtered);
+      }
+    }
+
+    function eksporPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('l', 'mm', 'a4');
+      
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(23, 37, 84); 
+      doc.text("Laporan Inventaris Mesin Assembly (Live View)", 14, 15);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100);
+      doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 21);
+
+      const list = window.getListMesin();
+      const tableData = list.map((m, index) => [
+        index + 1,
+        m.tipeMesin || '-',
+        m.namaMesin || '-',
+        m.modelMesin || '-',
+        m.noSeri || '-',
+        m.tahun || '-',
+        m.keterangan || '-',
+        `${m.jumlah || 0}`,
+        m.plant || '-'
+      ]);
+
+      doc.autoTable({
+        startY: 26,
+        head: [['No', 'Tipe', 'Nama Mesin', 'Model', 'No Seri', 'Tahun', 'Keterangan', 'Qty', 'Lokasi']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [23, 37, 84], halign: 'center' }, 
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 10 }, 
+          5: { halign: 'center' }, 
+          7: { halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105] } 
+        },
+        styles: { fontSize: 8, cellPadding: 3 },
+        alternateRowStyles: { fillColor: [248, 250, 252] }
+      });
+
+      doc.save("Rekap_Mesin_Assembly_ViewOnly.pdf");
+    }
+
+    function bukaPopUpNamaMesin(tipe) {
+      const data = window.currentRekapTipe[tipe];
+      if (!data) return;
+
+      document.getElementById('popUpNamaTitle').innerHTML = `<i class="fa-solid fa-list-ul text-blue-500 mr-2"></i>Tipe: ${tipe}`;
+      
+      const rekapNama = {};
+      data.items.forEach(m => {
+        const nama = m.namaMesin ? m.namaMesin.trim() : 'Tanpa Nama';
+        if (!rekapNama[nama]) rekapNama[nama] = { total: 0, items: [] };
+        rekapNama[nama].total += (Number(m.jumlah) || 0);
+        rekapNama[nama].items.push(m);
+      });
+      
+      window.currentRekapNama = rekapNama;
+
+      let html = '';
+      Object.keys(rekapNama).sort().forEach(nama => {
+        html += `
+          <li class="flex justify-between items-center py-3 border-b border-slate-50 last:border-0">
+            <span onclick="bukaDetailItems('${nama}')" class="font-bold text-slate-700 hover:text-blue-600 text-sm truncate pr-4 cursor-pointer transition" title="Ketuk untuk melihat detail">${nama}</span>
+            <button onclick="bukaDetailItems('${nama}')" class="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shadow-sm flex-shrink-0">
+              ${rekapNama[nama].total} Unit <i class="fa-solid fa-chevron-right ml-1.5 text-[10px]"></i>
+            </button>
+          </li>
+        `;
+      });
+
+      document.getElementById('listPopUpNama').innerHTML = html;
+      document.getElementById('modalPopUpNama').classList.remove('hidden');
+    }
+
+    function tutupPopUpNama() {
+      document.getElementById('modalPopUpNama').classList.add('hidden');
+    }
+
+    function bukaDetailItems(nama) {
+      const data = window.currentRekapNama[nama];
+      if (!data) return;
+
+      document.getElementById('detailItemsTitle').innerHTML = `<i class="fa-solid fa-box-open text-emerald-500 mr-2"></i>Detail: ${nama}`;
+      
+      let html = '';
+      data.items.forEach(m => {
+        html += `
+          <li class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs shadow-sm">
+            <div class="grid grid-cols-2 gap-y-3 gap-x-4">
+              <div>
+                <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-0.5">Model</span> 
+                <span class="font-bold text-slate-800">${m.modelMesin || '-'}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-0.5">No Seri</span> 
+                <span class="font-mono font-bold text-slate-800">${m.noSeri || '-'}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-0.5">Tahun</span> 
+                <span class="font-semibold text-slate-700">${m.tahun || '-'}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-0.5">Jumlah</span> 
+                <span class="font-bold text-emerald-600">${m.jumlah || 0} Unit</span>
+              </div>
+              <div class="col-span-2 flex items-center border-t border-slate-200/70 pt-2.5 mt-0.5">
+                <i class="fa-solid fa-location-dot text-slate-400 mr-1.5 text-[10px]"></i>
+                <span class="font-semibold text-slate-700">${m.plant || '-'}</span>
+              </div>
+              <div class="col-span-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-1">Keterangan</span> 
+                <span class="text-slate-600 font-medium leading-relaxed">${m.keterangan || '-'}</span>
+              </div>
+            </div>
+          </li>
+        `;
+      });
+
+      document.getElementById('listDetailItems').innerHTML = html;
+      document.getElementById('modalDetailItems').classList.remove('hidden');
+    }
+
+    function tutupDetailItems() {
+      document.getElementById('modalDetailItems').classList.add('hidden');
+    }
+
+    window.filterData = filterData;
+    window.filterRingkasan = filterRingkasan;
+    window.eksporPDF = eksporPDF;
+    window.bukaPopUpNamaMesin = bukaPopUpNamaMesin;
+    window.tutupPopUpNama = tutupPopUpNama;
+    window.bukaDetailItems = bukaDetailItems;
+    window.tutupDetailItems = tutupDetailItems;
+  </script>
+</body>
+</html>
