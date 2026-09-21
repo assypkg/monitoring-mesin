@@ -114,7 +114,6 @@
 
       let html = '';
       Object.keys(rekap).sort().forEach(tipe => {
-        // Desain kartu diubah menjadi format vertikal yang lebih ringkas (cocok untuk 4 kolom)
         html += `
           <div data-tipe="${tipe}" onclick="bukaPopUpNamaMesin('${tipe}')" class="ringkasan-card bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 p-3 rounded-xl cursor-pointer transition duration-200 flex flex-col justify-between min-h-[75px] shadow-sm group">
             <span class="font-bold text-slate-700 group-hover:text-blue-800 text-[10px] uppercase line-clamp-2 leading-tight mb-2" title="${tipe}">${tipe}</span>
@@ -151,6 +150,7 @@
                 <th class="px-4 py-3.5 font-semibold">Model</th>
                 <th class="px-4 py-3.5 font-semibold">No. Seri</th>
                 <th class="px-4 py-3.5 font-semibold">Tahun</th>
+                <th class="px-4 py-3.5 font-semibold">Buatan</th>
                 <th class="px-4 py-3.5 font-semibold">Keterangan</th>
                 <th class="px-4 py-3.5 font-semibold text-center">Jumlah</th>
                 <th class="px-4 py-3.5 font-semibold">Lokasi</th>
@@ -171,6 +171,7 @@
             <td class="px-4 py-3 text-slate-600">${m.modelMesin || '-'}</td>
             <td class="px-4 py-3 font-mono text-xs text-slate-500">${m.noSeri || '-'}</td>
             <td class="px-4 py-3 text-slate-600 font-medium">${m.tahun || '-'}</td>
+            <td class="px-4 py-3 text-slate-600 font-medium uppercase">${m.buatan || '-'}</td>
             <td class="px-4 py-3 text-slate-500 text-xs max-w-xs truncate" title="${m.keterangan || '-'}">${m.keterangan || '-'}</td>
             <td class="px-4 py-3 text-center font-bold text-emerald-700">${m.jumlah || 0} Unit</td>
             <td class="px-4 py-3 text-slate-600 text-xs"><i class="fa-solid fa-location-dot text-slate-400 mr-1.5"></i>${m.plant || '-'}</td>
@@ -198,8 +199,9 @@
             
             <div class="grid grid-cols-2 gap-2.5 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100 mt-auto">
               <div><span class="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Tahun</span> <span class="font-semibold text-slate-700">${m.tahun || '-'}</span></div>
+              <div><span class="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Buatan</span> <span class="font-semibold text-slate-700 uppercase">${m.buatan || '-'}</span></div>
               <div><span class="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Jumlah</span> <span class="font-bold text-emerald-600">${m.jumlah || 0} Unit</span></div>
-              <div class="col-span-2 flex items-center mt-0.5"><i class="fa-solid fa-location-dot text-slate-400 mr-1.5 text-[10px]"></i><span class="font-semibold text-slate-600">${m.plant || '-'}</span></div>
+              <div class="flex items-center self-end"><i class="fa-solid fa-location-dot text-slate-400 mr-1.5 text-[10px]"></i><span class="font-semibold text-slate-600">${m.plant || '-'}</span></div>
               ${m.keterangan ? `<div class="col-span-2 border-t border-slate-200 pt-2 mt-1"><span class="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Keterangan</span> <span class="text-slate-600 italic text-[11px] leading-snug">${m.keterangan}</span></div>` : ''}
             </div>
           </div>
@@ -223,8 +225,8 @@
   <header class="bg-blue-950 text-white p-4 sticky top-0 z-40 shadow-md">
     <div class="max-w-6xl mx-auto flex justify-between items-center w-full">
       <div>
-        <h1 class="font-bold text-lg tracking-wide"><i class="fa-solid fa-industry text-emerald-400 mr-2"></i>Database Mesin Assembly</h1>
-        <p class="text-xs text-slate-300">Daftar Mesin Assembly Live View</p>
+        <h1 class="font-bold text-lg tracking-wide"><i class="fa-solid fa-industry text-emerald-400 mr-2"></i>Master Mesin</h1>
+        <p class="text-xs text-slate-300">Corporate Manufacturing Dashboard - Live View</p>
       </div>
       <div class="bg-blue-900/50 border border-blue-800 text-blue-200 text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 sm:gap-2">
         <span class="relative flex h-2 w-2">
@@ -239,7 +241,6 @@
 
   <main class="max-w-6xl mx-auto p-4 md:p-6 lg:p-8">
     
-    <!-- DASHBOARD KPI & LOG -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
       <div class="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-3xl p-6 text-white shadow-md flex flex-col justify-center min-h-[120px]">
         <span class="text-xs font-bold opacity-90 tracking-wider uppercase">Total Aset Keseluruhan</span>
@@ -258,30 +259,26 @@
       </div>
     </div>
 
-    <!-- BLOK RINGKASAN TIPE MESIN -->
     <div class="mb-6 bg-white border border-slate-200 rounded-3xl p-4 md:p-5 shadow-sm">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 mb-3 gap-3">
         <span class="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wide flex items-center shrink-0">
           <i class="fa-solid fa-chart-pie mr-2 text-blue-500"></i> Ringkasan Tipe Mesin
         </span>
         
-        <!-- Fitur Pencarian Khusus Ringkasan -->
         <div class="relative w-full sm:w-64">
           <input type="text" id="searchRingkasan" onkeyup="filterRingkasan()" placeholder="Cari tipe mesin..." class="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 shadow-sm transition">
           <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-[10px]"></i>
         </div>
       </div>
       
-      <!-- Grid diubah menjadi 2 kolom (Mobile) dan 4 kolom (Tablet/PC) -->
       <div id="ringkasanContainer" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
       </div>
     </div>
 
-    <!-- TOOLBAR PENCARIAN UTAMA & FILTER -->
     <div class="flex flex-col sm:flex-row gap-3 mb-6 bg-white border border-slate-200 p-3 rounded-2xl shadow-sm items-center">
       <div class="flex gap-2 w-full flex-1 items-center">
         <div class="relative flex-1">
-          <input type="text" id="searchInput" onkeyup="filterData()" placeholder="Cari mesin, tipe, model..." class="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 shadow-sm transition">
+          <input type="text" id="searchInput" onkeyup="filterData()" placeholder="Cari mesin, tipe, model, buatan..." class="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 shadow-sm transition">
           <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-400 text-xs md:text-sm"></i>
         </div>
         <button onclick="eksporPDF()" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold hover:bg-emerald-100 flex items-center justify-center shadow-sm whitespace-nowrap transition">
@@ -299,11 +296,9 @@
       </div>
     </div>
 
-    <!-- TABEL DATA UTAMA -->
     <div id="cardsContainer" class="w-full transition-all duration-300"></div>
   </main>
 
-  <!-- POP-UP LAPIS 1: NAMA MESIN BERDASARKAN TIPE -->
   <div id="modalPopUpNama" class="fixed inset-0 bg-blue-950/70 z-50 hidden backdrop-blur-sm overflow-y-auto">
     <div class="min-h-screen px-4 py-8 text-center flex items-center justify-center">
       <div class="bg-white rounded-3xl max-w-sm w-full p-6 text-left shadow-2xl relative border-t-4 border-blue-500">
@@ -319,7 +314,6 @@
     </div>
   </div>
 
-  <!-- POP-UP LAPIS 2: DETAIL RINCIAN SPESIFIK -->
   <div id="modalDetailItems" class="fixed inset-0 bg-blue-950/80 z-[60] hidden backdrop-blur-sm overflow-y-auto">
     <div class="min-h-screen px-4 py-8 text-center flex items-center justify-center">
       <div class="bg-white rounded-3xl max-w-md w-full p-6 text-left shadow-2xl relative border-t-4 border-emerald-500">
@@ -344,7 +338,6 @@
   </style>
 
   <script>
-    // FUNGSI PENCARIAN KHUSUS UNTUK BLOK RINGKASAN TIPE MESIN
     function filterRingkasan() {
       const q = document.getElementById('searchRingkasan').value.toLowerCase();
       const cards = document.querySelectorAll('.ringkasan-card');
@@ -370,6 +363,7 @@
         (m.plant || '').toLowerCase().includes(q) ||
         (m.tipeMesin || '').toLowerCase().includes(q) ||
         (m.modelMesin || '').toLowerCase().includes(q) ||
+        (m.buatan || '').toLowerCase().includes(q) ||
         (m.keterangan || '').toLowerCase().includes(q)
       );
 
@@ -412,6 +406,7 @@
         m.modelMesin || '-',
         m.noSeri || '-',
         m.tahun || '-',
+        m.buatan || '-',
         m.keterangan || '-',
         `${m.jumlah || 0}`,
         m.plant || '-'
@@ -419,14 +414,14 @@
 
       doc.autoTable({
         startY: 26,
-        head: [['No', 'Tipe', 'Nama Mesin', 'Model', 'No Seri', 'Tahun', 'Keterangan', 'Qty', 'Lokasi']],
+        head: [['No', 'Tipe', 'Nama Mesin', 'Model', 'No Seri', 'Tahun', 'Buatan', 'Keterangan', 'Qty', 'Lokasi']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [23, 37, 84], halign: 'center' }, 
         columnStyles: {
           0: { halign: 'center', cellWidth: 10 }, 
           5: { halign: 'center' }, 
-          7: { halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105] } 
+          8: { halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105] } 
         },
         styles: { fontSize: 8, cellPadding: 3 },
         alternateRowStyles: { fillColor: [248, 250, 252] }
@@ -495,14 +490,18 @@
                 <span class="font-semibold text-slate-700">${m.tahun || '-'}</span>
               </div>
               <div>
+                <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-0.5">Buatan</span> 
+                <span class="font-semibold text-slate-700 uppercase">${m.buatan || '-'}</span>
+              </div>
+              <div>
                 <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-0.5">Jumlah</span> 
                 <span class="font-bold text-emerald-600">${m.jumlah || 0} Unit</span>
               </div>
-              <div class="col-span-2 flex items-center border-t border-slate-200/70 pt-2.5 mt-0.5">
-                <i class="fa-solid fa-location-dot text-slate-400 mr-1.5 text-[10px]"></i>
+              <div>
+                <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-0.5">Lokasi</span> 
                 <span class="font-semibold text-slate-700">${m.plant || '-'}</span>
               </div>
-              <div class="col-span-2 bg-white p-2.5 rounded-lg border border-slate-100">
+              <div class="col-span-2 bg-white p-2.5 rounded-lg border border-slate-100 mt-1">
                 <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-1">Keterangan</span> 
                 <span class="text-slate-600 font-medium leading-relaxed">${m.keterangan || '-'}</span>
               </div>
